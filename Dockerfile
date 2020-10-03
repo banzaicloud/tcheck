@@ -1,24 +1,28 @@
-ARG GO_VERSION=1.11.5
-
-FROM golang:${GO_VERSION}-alpine AS builder
+FROM golang:1.15-alpine AS builder
 
 ENV GOFLAGS="-mod=readonly"
 ENV CGO_ENABLED=0
 
-RUN apk add --update --no-cache ca-certificates make git curl mercurial bzr
+RUN apk add --update --no-cache ca-certificates git
 
-RUN mkdir -p /build
-WORKDIR /build
+RUN mkdir -p /workspace
+WORKDIR /workspace
 
-COPY go.* /build/
+COPY go.* /workspace/
 RUN go mod download
 
-COPY . /build
+COPY . /workspace
 RUN go build -o tcheck .
 
 
-FROM alpine:3.8
+FROM alpine:3.12
 
-RUN apk add --update --no-cache ca-certificates tzdata
+RUN apk add --update --no-cache ca-certificates tzdata bash curl
 
-COPY --from=builder /build/tcheck /usr/bin/tcheck
+SHELL ["/bin/bash", "-c"]
+
+# set up nsswitch.conf for Go's "netgo" implementation
+# https://github.com/gliderlabs/docker-alpine/issues/367#issuecomment-424546457
+RUN test ! -e /etc/nsswitch.conf && echo 'hosts: files dns' > /etc/nsswitch.conf
+
+COPY --from=builder /workspace/tcheck /usr/local/bin/tcheck
